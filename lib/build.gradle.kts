@@ -16,6 +16,10 @@ dependencies {
     testImplementation(libs.junit.jupiter.engine)
 
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.kotlincrypto:secure-random:0.2.0")
+    implementation("com.nimbusds:nimbus-jose-jwt:9.37.3")
 }
 
 java {
@@ -31,6 +35,10 @@ tasks.named<Test>("test") {
 publishing {
     publications {
         create<MavenPublication>("ZKP") {
+            groupId = "software.tice.zkp"
+            artifactId = "zkp"
+            version = "1.0"
+
             from(components["java"])
         }
     }
