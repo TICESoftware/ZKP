@@ -35,7 +35,7 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         }
     }
 
-    private fun answerChallengeSdJwt(ephemeralPublicKey: ECKey, jwt: String): String {
+    fun answerChallengeSdJwt(ephemeralPublicKey: ECKey, jwt: String): String {
         val (digest, r, s) = parseSdJwt(jwt)
         val (R, S) = answerChallenge(ephemeralPublicKey, digest, r, s)
         val signature = encodeConcatSignature(R, S)
@@ -43,7 +43,7 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         return "${parts[0]}.${parts[1]}.${signature}"
     }
 
-    private fun answerChallenge(ephemeralPublicKey: ECKey, digest: ByteArray, signatureR: ByteArray, signatureS: ByteArray): Pair<ByteArray, ByteArray> {
+    internal fun answerChallenge(ephemeralPublicKey: ECKey, digest: ByteArray, signatureR: ByteArray, signatureS: ByteArray): Pair<ByteArray, ByteArray> {
         val s = BigInteger(1, signatureS)
         val sInv = s.modInverse(secp256r1Spec.curve.field.characteristic)
 
