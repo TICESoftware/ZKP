@@ -5,20 +5,12 @@ import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.ECDSASigner
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.ECKey
-import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jose.util.Base64URL
-import org.kotlincrypto.SecureRandom
-import java.io.StringReader
-import java.math.BigInteger
 import java.security.AlgorithmParameters
-import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
-import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
 import java.security.spec.*
-import java.util.*
-import kotlin.math.sign
 import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.assertFalse
@@ -72,18 +64,17 @@ class ZKPExampleTest {
         val jwtSignature = signer.sign(jwtHeader, message)
 
         val JWT = "${jwtHeader.toBase64URL()}.${Base64URL.encode(message)}.${jwtSignature}"
-        println(JWT)
-        // verify
+
+        // flow
         val verifier = ZKPVerifier(issuerPublicKey)
         val prover = ZKPProver(issuerPublicKey)
-        val transactionId = "random-id-string"
 
         val challengeRequestData = prover.createChallengeRequest(VpTokenFormat.SDJWT, JWT)
-        val (challenge, key) = verifier.createChallenge(challengeRequestData)
-        val zkpJwt = prover.answerChallenge(challenge, VpTokenFormat.SDJWT, JWT)
-        val proofed = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
+        val (challengePubKey, challengePrivKey) = verifier.createChallenge(challengeRequestData)
+        val zkpJwt = prover.answerChallenge(challengePubKey, VpTokenFormat.SDJWT, JWT)
+        val verified = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, challengePrivKey)
 
-        assertTrue { proofed }
+        assertTrue { verified }
     }
 
     @Test fun testCreateChallenge() {
@@ -95,6 +86,8 @@ class ZKPExampleTest {
         val (challengePubKey, challengePrivKey) = verifier.createChallenge(challengeRequestData)
         println(encodeECPublicKeyToPem(challengePubKey))
         println(encodeECPrivateKeyToPem(challengePrivKey))
+
+        // Just prints out the challenge in order to copy it to Swift
     }
 
     @Test fun testAnswerChallengeFromSwift() {
@@ -102,15 +95,14 @@ class ZKPExampleTest {
         val issuerPublicKey = issuerKeyPair.toECPublicKey()
         val verifier = ZKPVerifier(issuerPublicKey)
 
-        val jwtFromSwift = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.AjeYqOQOhFykHYcZaZ2Xa-M7CjM1XVXFYZ9pPXQBWdLvAhZoBLWgQeceUpGxRk9R92SRHkXPteF_ZJ_bFxEWvVCL"
-        val key = BigInteger("51485709314959915694715422963369728803094646990902903965964523348002715876334")
+        val challenge = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM + "\n" + ephPrivateKeyPEM).toECKey()
+        val challengePriv = challenge.toECPrivateKey()
 
-//        val challengeKeyPair = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM + "\n" + ephPrivateKeyPEM).toECKey()
-//
-////        assertTrue { keyS == key }
-//        assertTrue {
-//            verifier.verifyChallengeSdJwt(jwtFromSwift, key)
-//        }
+        val zkpJWTFromSwift = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.AjeYqOQOhFykHYcZaZ2Xa-M7CjM1XVXFYZ9pPXQBWdLvA5xBdYSr9aI_8ak0cosZj5qW-Bc4RUeeVN7BqUoggzJ5"
+
+        assertTrue {
+            verifier.verifyChallengeSdJwt(zkpJWTFromSwift, challengePriv)
+        }
     }
 
     @Test fun testAnswerChallenge() {
@@ -167,13 +159,11 @@ class ZKPExampleTest {
         // verify
         val verifier = ZKPVerifier(issuerPublicKey)
 
-        val transactionId = "random-id-string"
-
         val challengeRequestData = prover.createChallengeRequest(VpTokenFormat.SDJWT, JWT)
         val (challenge, key) = verifier.createChallenge(challengeRequestData)
         val zkpJwt = prover.answerChallenge(challenge, VpTokenFormat.SDJWT, JWT)
-        val proofed = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
+        val verified = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
 
-        assertFalse { proofed }
+        assertFalse { verified }
     }
 }
