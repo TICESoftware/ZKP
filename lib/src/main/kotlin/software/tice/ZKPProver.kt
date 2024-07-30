@@ -28,14 +28,14 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         return ChallengeRequestData(Base64URL.encode(digest).toString(), Base64URL.encode(r).toString())
     }
 
-    fun answerChallenge(ephemeralPublicKey: ECKey, vpTokenFormat: VpTokenFormat, data: String): String {
+    fun answerChallenge(ephemeralPublicKey: ECPublicKey, vpTokenFormat: VpTokenFormat, data: String): String {
         return when (vpTokenFormat) {
             VpTokenFormat.MSOMDOC -> error("not implemented yet")
             VpTokenFormat.SDJWT -> answerChallengeSdJwt(ephemeralPublicKey, data)
         }
     }
 
-    fun answerChallengeSdJwt(ephemeralPublicKey: ECKey, jwt: String): String {
+    fun answerChallengeSdJwt(ephemeralPublicKey: ECPublicKey, jwt: String): String {
         val (digest, r, s) = parseSdJwt(jwt)
         val (R, S) = answerChallenge(ephemeralPublicKey, digest, r, s)
         val signature = encodeConcatSignature(R, S)
@@ -43,7 +43,7 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         return "${parts[0]}.${parts[1]}.${signature}"
     }
 
-    internal fun answerChallenge(ephemeralPublicKey: ECKey, digest: ByteArray, signatureR: ByteArray, signatureS: ByteArray): Pair<ByteArray, ByteArray> {
+    internal fun answerChallenge(ephemeralPublicKey: ECPublicKey, digest: ByteArray, signatureR: ByteArray, signatureS: ByteArray): Pair<ByteArray, ByteArray> {
         val s = BigInteger(1, signatureS)
         val sInv = s.modInverse(secp256r1Spec.curve.field.characteristic)
 
@@ -52,7 +52,7 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         val Gnew = secp256r1Spec.g.multiply(z).add(issuerPublicKeyECPoint.multiply(r))
         val R = Gnew.multiply(sInv).getEncoded(true)
 
-        val ephemeralPublicKeyPoint = secp256r1Spec.curve.createPoint(ephemeralPublicKey.x.decodeToBigInteger(), ephemeralPublicKey.y.decodeToBigInteger())
+        val ephemeralPublicKeyPoint = secp256r1Spec.curve.createPoint(ephemeralPublicKey.w.affineX, ephemeralPublicKey.w.affineY)
         val S = ephemeralPublicKeyPoint.multiply(sInv).getEncoded(true)
 
         return Pair(R, S)

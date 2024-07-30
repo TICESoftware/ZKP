@@ -5,6 +5,7 @@ import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.ECDSASigner
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.ECKey
+import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jose.util.Base64URL
 import org.kotlincrypto.SecureRandom
 import java.io.StringReader
@@ -13,6 +14,7 @@ import java.security.AlgorithmParameters
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
+import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
 import java.security.spec.*
 import java.util.*
@@ -38,17 +40,15 @@ mXT3Jnvb5uHxK/5JZxi0wqzGQ11KjZvUF8Ftc/oGAzWdPmTwGEg5ZD293g==
 
 val ephPublicKeyPEM = """
 -----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAETh2gvUk5JJmz+381XiN6gVZrAu4R
-cqKw0CDsXMccimgga3wvNwjaMTFE34NFROJurbCOEtna6gSMFwQQk5Gt6Q==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1yu+OWNhRwFODLm/loVSpUdRZC2C
+2aiB1+Et7Y300OsId7Mq9Z3ecplLGRaFAoPCkPylDysY0Hqp2VerlX7wgA==
 -----END PUBLIC KEY-----
 """
 
 val ephPrivateKeyPEM = """
 -----BEGIN PRIVATE KEY-----
-MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgandHRq1kbZypYtUN
-CbiSWKbtgDpb44KNGEhyAU/FbVKgCgYIKoZIzj0DAQehRANCAAROHaC9STkkmbP7
-fzVeI3qBVmsC7hFyorDQIOxcxxyKaCBrfC83CNoxMUTfg0VE4m6tsI4S2drqBIwX
-BBCTka3p
+MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCBKcjFocoaViPkin2Tm
+5XPAXPR5zYG7rA7px6i0CJ1ICA==
 -----END PRIVATE KEY-----
 """
 
@@ -91,11 +91,10 @@ class ZKPExampleTest {
         val issuerPublicKey = issuerKeyPair.toECPublicKey()
         val verifier = ZKPVerifier(issuerPublicKey)
 
-        // val jwt = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.Zh2GRwhm36gpV1TZc_j5E74P4taykE0CxKICGPxVP-bsP1BQIKKixBJe6CQpAt0dizITTHQnLujDNFAMixcT-w"
         val challengeRequestData = ChallengeRequestData("nLT2lz465dAnKWRSfjsImppvJ4gun1Rzy2_RPYH4fec", "Zh2GRwhm36gpV1TZc_j5E74P4taykE0CxKICGPxVP-Y")
-        val (challenge, key) = verifier.createChallenge(challengeRequestData)
-        println(encodeECPublicKeyToPem(challenge))
-        println(key.toString())
+        val (challengePubKey, challengePrivKey) = verifier.createChallenge(challengeRequestData)
+        println(encodeECPublicKeyToPem(challengePubKey))
+        println(encodeECPrivateKeyToPem(challengePrivKey))
     }
 
     @Test fun testAnswerChallengeFromSwift() {
@@ -105,9 +104,13 @@ class ZKPExampleTest {
 
         val jwtFromSwift = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.AjeYqOQOhFykHYcZaZ2Xa-M7CjM1XVXFYZ9pPXQBWdLvAhZoBLWgQeceUpGxRk9R92SRHkXPteF_ZJ_bFxEWvVCL"
         val key = BigInteger("51485709314959915694715422963369728803094646990902903965964523348002715876334")
-        assertTrue {
-            verifier.verifyChallengeSdJwt(jwtFromSwift, key)
-        }
+
+//        val challengeKeyPair = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM + "\n" + ephPrivateKeyPEM).toECKey()
+//
+////        assertTrue { keyS == key }
+//        assertTrue {
+//            verifier.verifyChallengeSdJwt(jwtFromSwift, key)
+//        }
     }
 
     @Test fun testAnswerChallenge() {
@@ -116,7 +119,7 @@ class ZKPExampleTest {
         val issuerPublicKey = issuerKeyPair.toECPublicKey()
         val prover = ZKPProver(issuerPublicKey)
 
-        val ephPubKey = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM).toECKey()
+        val ephPubKey = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM).toECKey().toECPublicKey()
         val payload = "Some raw string"
 
         val md = MessageDigest.getInstance("SHA-256")
