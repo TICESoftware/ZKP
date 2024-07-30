@@ -4,14 +4,15 @@ import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.crypto.ECDSASigner
 import com.nimbusds.jose.jwk.Curve
+import com.nimbusds.jose.jwk.ECKey
 import com.nimbusds.jose.util.Base64URL
 import org.kotlincrypto.SecureRandom
+import java.io.StringReader
+import java.math.BigInteger
 import java.security.AlgorithmParameters
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.MessageDigest
-import java.security.interfaces.ECKey
-import java.security.interfaces.ECPrivateKey
 import java.security.interfaces.ECPublicKey
 import java.security.spec.*
 import java.util.*
@@ -37,9 +38,18 @@ mXT3Jnvb5uHxK/5JZxi0wqzGQ11KjZvUF8Ftc/oGAzWdPmTwGEg5ZD293g==
 
 val ephPublicKeyPEM = """
 -----BEGIN PUBLIC KEY-----
-MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEy+m1V2j1LkiQqyksoDMhSBjFYgeV
-OHxKsOSk1E+iudez3wFozx9tHArWhn8LcE7nqAcqoxr2v0NqMHb3noXvvQ==
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAETh2gvUk5JJmz+381XiN6gVZrAu4R
+cqKw0CDsXMccimgga3wvNwjaMTFE34NFROJurbCOEtna6gSMFwQQk5Gt6Q==
 -----END PUBLIC KEY-----
+"""
+
+val ephPrivateKeyPEM = """
+-----BEGIN PRIVATE KEY-----
+MIGTAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBHkwdwIBAQQgandHRq1kbZypYtUN
+CbiSWKbtgDpb44KNGEhyAU/FbVKgCgYIKoZIzj0DAQehRANCAAROHaC9STkkmbP7
+fzVeI3qBVmsC7hFyorDQIOxcxxyKaCBrfC83CNoxMUTfg0VE4m6tsI4S2drqBIwX
+BBCTka3p
+-----END PRIVATE KEY-----
 """
 
 class ZKPExampleTest {
@@ -56,33 +66,57 @@ class ZKPExampleTest {
         val issuerPublicKey = issuerKP.public as ECPublicKey
 
         // create random message and signed JWT
-        val message = ByteArray(50)
-        SecureRandom().nextBytesCopyTo(message)
+        val message = "Some raw message".encodeToByteArray()
         val signer = ECDSASigner(issuerKP.private, Curve.P_256)
         val jwtHeader = JWSHeader(JWSAlgorithm.ES256)
         val jwtSignature = signer.sign(jwtHeader, message)
 
         val JWT = "${jwtHeader.toBase64URL()}.${Base64URL.encode(message)}.${jwtSignature}"
-
+        println(JWT)
         // verify
         val verifier = ZKPVerifier(issuerPublicKey)
         val prover = ZKPProver(issuerPublicKey)
         val transactionId = "random-id-string"
 
         val challengeRequestData = prover.createChallengeRequest(VpTokenFormat.SDJWT, JWT)
-        val challenge = verifier.createChallenge(transactionId, challengeRequestData)
+        val (challenge, key) = verifier.createChallenge(challengeRequestData)
         val zkpJwt = prover.answerChallenge(challenge, VpTokenFormat.SDJWT, JWT)
-        val proofed = verifier.verifyChallenge(transactionId, VpTokenFormat.SDJWT, zkpJwt)
+        val proofed = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
 
         assertTrue { proofed }
     }
 
+    @Test fun testCreateChallenge() {
+        val issuerKeyPair = ECKey.parseFromPEMEncodedObjects(publicKeyPEM + "\n" + privateKeyPEM).toECKey()
+        val issuerPublicKey = issuerKeyPair.toECPublicKey()
+        val verifier = ZKPVerifier(issuerPublicKey)
+
+        // val jwt = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.Zh2GRwhm36gpV1TZc_j5E74P4taykE0CxKICGPxVP-bsP1BQIKKixBJe6CQpAt0dizITTHQnLujDNFAMixcT-w"
+        val challengeRequestData = ChallengeRequestData("nLT2lz465dAnKWRSfjsImppvJ4gun1Rzy2_RPYH4fec", "Zh2GRwhm36gpV1TZc_j5E74P4taykE0CxKICGPxVP-Y")
+        val (challenge, key) = verifier.createChallenge(challengeRequestData)
+        println(encodeECPublicKeyToPem(challenge))
+        println(key.toString())
+    }
+
+    @Test fun testAnswerChallengeFromSwift() {
+        val issuerKeyPair = ECKey.parseFromPEMEncodedObjects(publicKeyPEM + "\n" + privateKeyPEM).toECKey()
+        val issuerPublicKey = issuerKeyPair.toECPublicKey()
+        val verifier = ZKPVerifier(issuerPublicKey)
+
+        val jwtFromSwift = "eyJhbGciOiJFUzI1NiJ9.U29tZSByYXcgbWVzc2FnZQ.AjeYqOQOhFykHYcZaZ2Xa-M7CjM1XVXFYZ9pPXQBWdLvAhZoBLWgQeceUpGxRk9R92SRHkXPteF_ZJ_bFxEWvVCL"
+        val key = BigInteger("51485709314959915694715422963369728803094646990902903965964523348002715876334")
+        assertTrue {
+            verifier.verifyChallengeSdJwt(jwtFromSwift, key)
+        }
+    }
+
     @Test fun testAnswerChallenge() {
-        val issuerPrivateKey = initializeECPrivateKeyFromPEM(privateKeyPEM)
-        val issuerPublicKey = initializeECPublicKeyFromPEM(publicKeyPEM)
+        val issuerKeyPair = ECKey.parseFromPEMEncodedObjects(publicKeyPEM + "\n" + privateKeyPEM).toECKey()
+        val issuerPrivateKey = issuerKeyPair.toECPrivateKey()
+        val issuerPublicKey = issuerKeyPair.toECPublicKey()
         val prover = ZKPProver(issuerPublicKey)
 
-        val ephPubKey = initializeECPublicKeyFromPEM(ephPublicKeyPEM)
+        val ephPubKey = ECKey.parseFromPEMEncodedObjects(ephPublicKeyPEM).toECKey()
         val payload = "Some raw string"
 
         val md = MessageDigest.getInstance("SHA-256")
@@ -96,11 +130,11 @@ class ZKPExampleTest {
         println(signature)
 
         val signatureString = signature.decodeToString()
-        val (R, S) = decodeConcatSignature(signatureString)
+        val (signatureR, signatureS) = decodeConcatSignature(signatureString)
 
-
-
-//        prover.answerChallenge(com.nimbusds.jose.jwk.ECKey, digest, R, S)
+        val (newR, newS) = prover.answerChallenge(ephPubKey, digest, signatureR, signatureS)
+        val encodedZKPSignature = encodeConcatSignature(newR, newS)
+        println(encodedZKPSignature)
     }
 
     @Test fun runUsingWrongPublicKey() {
@@ -120,7 +154,7 @@ class ZKPExampleTest {
         val prover = ZKPProver(otherPublicKey)
 
         // create random message and signed JWT
-        val message = "Some message".encodeToByteArray()
+        val message = "Some raw message".encodeToByteArray()
         val signer = ECDSASigner(issuerKP.private, Curve.P_256)
         val jwtHeader = JWSHeader(JWSAlgorithm.ES256)
         val jwtSignature = signer.sign(jwtHeader, message)
@@ -133,42 +167,10 @@ class ZKPExampleTest {
         val transactionId = "random-id-string"
 
         val challengeRequestData = prover.createChallengeRequest(VpTokenFormat.SDJWT, JWT)
-        val challenge = verifier.createChallenge(transactionId, challengeRequestData)
+        val (challenge, key) = verifier.createChallenge(challengeRequestData)
         val zkpJwt = prover.answerChallenge(challenge, VpTokenFormat.SDJWT, JWT)
-        val proofed = verifier.verifyChallenge(transactionId, VpTokenFormat.SDJWT, zkpJwt)
+        val proofed = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
 
         assertFalse { proofed }
-    }
-
-    fun initializeECPublicKeyFromPEM(pem: String): ECPublicKey {
-        // Remove the first and last lines
-        val pemCleaned = pem
-            .replace("-----BEGIN PUBLIC KEY-----", "")
-            .replace("-----END PUBLIC KEY-----", "")
-            .replace("\\s".toRegex(), "")
-
-        // Decode the base64 encoded string
-        val decodedKey = Base64.getDecoder().decode(pemCleaned)
-
-        // Convert to ECPrivateKey
-        val keySpec = X509EncodedKeySpec(decodedKey)
-        val keyFactory = KeyFactory.getInstance("EC")
-        return keyFactory.generatePublic(keySpec) as ECPublicKey
-    }
-
-    fun initializeECPrivateKeyFromPEM(pem: String): ECPrivateKey {
-        // Remove the first and last lines
-        val pemCleaned = pem
-            .replace("-----BEGIN PRIVATE KEY-----", "")
-            .replace("-----END PRIVATE KEY-----", "")
-            .replace("\\s".toRegex(), "")
-
-        // Decode the base64 encoded string
-        val decodedKey = Base64.getDecoder().decode(pemCleaned)
-
-        // Convert to ECPrivateKey
-        val keySpec = PKCS8EncodedKeySpec(decodedKey)
-        val keyFactory = KeyFactory.getInstance("EC")
-        return keyFactory.generatePrivate(keySpec) as ECPrivateKey
     }
 }

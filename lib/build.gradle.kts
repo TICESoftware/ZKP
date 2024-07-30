@@ -18,6 +18,7 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("org.bouncycastle:bcpkix-jdk18on:1.78.1")
     implementation("org.kotlincrypto:secure-random:0.2.0")
     implementation("com.nimbusds:nimbus-jose-jwt:9.37.3")
 }

@@ -23,7 +23,7 @@ class ZKPProver(issuerPublicKey: ECPublicKey) {
         }
     }
 
-    private fun createChallengeRequestSdJwt(jwt: String): ChallengeRequestData {
+    internal fun createChallengeRequestSdJwt(jwt: String): ChallengeRequestData {
         val (digest, r) = parseSdJwt(jwt)
         return ChallengeRequestData(Base64URL.encode(digest).toString(), Base64URL.encode(r).toString())
     }

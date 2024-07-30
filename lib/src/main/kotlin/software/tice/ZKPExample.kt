@@ -6,15 +6,14 @@ class ZKPExample {
     fun runZKP(issuerPublicKey: ECPublicKey, JWT: String) {
         val verifier = ZKPVerifier(issuerPublicKey)
         val prover = ZKPProver(issuerPublicKey)
-        val transactionId = "random-id-string"
 
         val challengeRequestData = prover.createChallengeRequest(VpTokenFormat.SDJWT, JWT)
 
-        val challenge = verifier.createChallenge(transactionId, challengeRequestData)
+        val (challenge, key) = verifier.createChallenge(challengeRequestData)
 
         val zkpJwt = prover.answerChallenge(challenge, VpTokenFormat.SDJWT, JWT)
 
-        val proofed = verifier.verifyChallenge(transactionId, VpTokenFormat.SDJWT, zkpJwt)
+        val proofed = verifier.verifyChallenge(VpTokenFormat.SDJWT, zkpJwt, key)
 
         println("PROOFED? ${proofed}")
     }

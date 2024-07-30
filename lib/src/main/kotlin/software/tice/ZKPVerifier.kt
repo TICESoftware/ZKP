@@ -20,49 +20,45 @@ class ZKPVerifier(issuerPublicKey: ECPublicKey) {
         issuerPublicKeyECPoint = secp256r1Spec.curve.createPoint(issuerPublicKey.w.affineX, issuerPublicKey.w.affineY)
     }
 
-    fun createChallenge(id: String, requestData: ChallengeRequestData): ECKey {
+    /**
+     * Creates a challenge for a transaction id based on a challenge request
+     * @param requestData: Challenge request data from prover consisting of the digest of the payload and the `r` part of the signature
+     * @return A public key that represents the challenge that is send to the prover and a secret key to verify the
+     * challenge later (must be remembered and kept private)
+     */
+    fun createChallenge(requestData: ChallengeRequestData): Pair<ECKey, BigInteger> {
         val z = BigInteger(1, Base64URL.from(requestData.digest).decode())
         val r = BigInteger(1, Base64URL.from(requestData.r).decode())
 
         val Gnew = secp256r1Spec.g.multiply(z).add(issuerPublicKeyECPoint.multiply(r))
 
         val ephemeralPrivateKey = secp256r1Spec.curve.randomFieldElement(SecureRandom()).toBigInteger()
-        challenges[id] = ephemeralPrivateKey
 
         val result = Gnew.multiply(ephemeralPrivateKey).normalize()
         val x = Base64URL.encode(result.affineXCoord.toBigInteger())
         val y = Base64URL.encode(result.affineYCoord.toBigInteger())
 
-        return ECKey.Builder(Curve.P_256, x, y)
-            .keyID(id)
-            .build()
+        return Pair(
+            ECKey.Builder(Curve.P_256, x, y).build(),
+            ephemeralPrivateKey
+        )
     }
 
-    fun verifyChallenge(id: String, vpTokenFormat: VpTokenFormat, data: String): Boolean {
+    fun verifyChallenge(vpTokenFormat: VpTokenFormat, data: String, key: BigInteger): Boolean {
         return when (vpTokenFormat) {
             VpTokenFormat.MSOMDOC -> error("not implemented yet")
-            VpTokenFormat.SDJWT -> verifyChallengeSdJwt(id, data)
+            VpTokenFormat.SDJWT -> verifyChallengeSdJwt(data, key)
         }
     }
 
-    private fun verifyChallengeSdJwt(id: String, jwt: String): Boolean {
-        check(challenges.containsKey(id))
+    internal fun verifyChallengeSdJwt(jwt: String, key: BigInteger): Boolean {
         val (R,S) = decodeConcatSignature(jwt.split(".")[2])
-        return verifyChallenge(id, R, S)
+        return verifyChallenge(key, R, S)
     }
 
-    private fun verifyChallenge(id: String, R: ByteArray, S: ByteArray): Boolean {
-        val ourS = secp256r1Spec.curve.decodePoint(R).multiply(challenges[id]).normalize()
+    internal fun verifyChallenge(key: BigInteger, R: ByteArray, S: ByteArray): Boolean {
+        val ourS = secp256r1Spec.curve.decodePoint(R).multiply(key).normalize()
         val theirS = secp256r1Spec.curve.decodePoint(S).normalize()
         return ourS == theirS
     }
 }
-
-//        val pubKeyPoint = ECPoint(result.affineXCoord.toBigInteger(), result.affineYCoord.toBigInteger())
-
-//        val parameters = AlgorithmParameters.getInstance("EC")
-//        parameters.init(ECGenParameterSpec("secp256r1"))
-//        val ecParameters = parameters.getParameterSpec(ECParameterSpec::class.java)
-//        val pubSpec = ECPublicKeySpec(pubKeyPoint, ecParameters)
-//        val kf = KeyFactory.getInstance("EC")
-//        val key = kf.generatePublic(pubSpec) as ECPublicKey
